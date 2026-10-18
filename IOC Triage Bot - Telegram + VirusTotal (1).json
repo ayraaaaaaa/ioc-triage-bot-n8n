@@ -1,0 +1,612 @@
+{
+  "name": "IOC Triage Bot - Telegram + VirusTotal",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        2928,
+        848
+      ],
+      "webhookId": "ioc-triage-telegram",
+      "id": "f4abd52d-3e3e-4fae-895e-bcccc72182ab",
+      "credentials": {
+        "telegramApi": {
+          "id": "Hk4SH1eP3x0AnGQz",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const msg = $input.item.json.message || {};\nconst raw = (msg.text || '').trim();\nconst chatId = msg.chat ? msg.chat.id : null;\n\n// refang common defanged IOCs: hxxp, [.]\nconst text = raw.replace(/\\[\\.\\]/g, '.').replace(/hxxp/gi, 'http');\n\nconst ipRe = /^(\\d{1,3}\\.){3}\\d{1,3}$/;\nconst hashRe = /^([a-fA-F0-9]{32}|[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$/;\nconst urlRe = /^https?:\\/\\/\\S+$/i;\nconst domainRe = /^(?!-)([a-z0-9-]{1,63}\\.)+[a-z]{2,}$/i;\nconst greetRe = /^(\\/start|\\/help|hi|hello|hey)\\b/i;\n\nlet iocType = 'unknown';\nif (greetRe.test(text)) iocType = 'greeting';\nelse if (ipRe.test(text)) iocType = 'ip';\nelse if (hashRe.test(text)) iocType = 'hash';\nelse if (urlRe.test(text)) iocType = 'url';\nelse if (domainRe.test(text)) iocType = 'domain';\n\nreturn { json: { iocType, ioc: text, chatId, firstName: msg.from ? msg.from.first_name : '' } };"
+      },
+      "name": "IOC Type Detector",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3136,
+        848
+      ],
+      "id": "435d1883-034b-4dcc-87cb-5d51c3e6f54c"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "rule-ip",
+                    "leftValue": "={{ $json.iocType }}",
+                    "rightValue": "ip",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ip"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "rule-domain",
+                    "leftValue": "={{ $json.iocType }}",
+                    "rightValue": "domain",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "domain"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "rule-url",
+                    "leftValue": "={{ $json.iocType }}",
+                    "rightValue": "url",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "url"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "rule-hash",
+                    "leftValue": "={{ $json.iocType }}",
+                    "rightValue": "hash",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "hash"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "rule-greeting",
+                    "leftValue": "={{ $json.iocType }}",
+                    "rightValue": "greeting",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "greeting"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "name": "Switch: Route by IOC Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        3360,
+        848
+      ],
+      "id": "9cfe1cfd-3db2-4f63-b55a-75cc01b485b3"
+    },
+    {
+      "parameters": {
+        "url": "=https://www.virustotal.com/api/v3/ip_addresses/{{ $json.ioc }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "name": "VT Lookup: IP",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3632,
+        544
+      ],
+      "id": "7a64042f-dbf2-4001-a72c-9a040493b95c",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "EQMkZvCOna84Dcb1",
+          "name": "Header Auth account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "=https://www.virustotal.com/api/v3/domains/{{ $json.ioc }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "name": "VT Lookup: Domain",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3632,
+        720
+      ],
+      "id": "654c4847-86ef-4a71-845c-8fc68d5f79ea",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "EQMkZvCOna84Dcb1",
+          "name": "Header Auth account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const d = $input.item.json;\n// VirusTotal URL id = base64url(url) without padding\nconst vtId = Buffer.from(d.ioc).toString('base64')\n  .replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');\nreturn { json: { ...d, vtId } };"
+      },
+      "name": "Encode URL for VT",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3632,
+        912
+      ],
+      "id": "e9e7acda-ed64-4f78-97f3-67901dd5b253"
+    },
+    {
+      "parameters": {
+        "url": "=https://www.virustotal.com/api/v3/urls/{{ $json.vtId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "name": "VT Lookup: URL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3856,
+        912
+      ],
+      "id": "7d87a788-4fa9-49b4-bc48-fe7da3a1d108",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "EQMkZvCOna84Dcb1",
+          "name": "Header Auth account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "=https://www.virustotal.com/api/v3/files/{{ $json.ioc }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "name": "VT Lookup: Hash",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3632,
+        1088
+      ],
+      "id": "c6b429fc-83a7-47cf-90e5-ddf95553ad76",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "EQMkZvCOna84Dcb1",
+          "name": "Header Auth account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const det = $('IOC Type Detector').item.json;\nconst attrs = ($json.data && $json.data.attributes) || null;\nconst base = { chatId: det.chatId, ioc: det.ioc, iocType: det.iocType };\n\nif (!attrs) {\n  return { json: { ...base, verdict: 'Not found', flagged: 0, total: 0, detections: 'n/a',\n    aiPrompt: `IOC: ${det.ioc}\\nType: ${det.iocType}\\nVerdict: Not found\\nVirusTotal has no record of this IOC.` } };\n}\n\nconst s = attrs.last_analysis_stats || {};\nconst m = s.malicious || 0, sus = s.suspicious || 0, h = s.harmless || 0, u = s.undetected || 0;\nconst total = m + sus + h + u;\nconst flagged = m + sus;\n\nlet verdict = 'Clean';\nif (m >= 5) verdict = 'Malicious';\nelse if (flagged > 0) verdict = 'Suspicious';\n\nconst aiPrompt = `IOC: ${det.ioc}\\nType: ${det.iocType}\\nVerdict: ${verdict}\\nEngines flagging it: ${flagged} of ${total}`;\nreturn { json: { ...base, verdict, flagged, total, detections: `${flagged}/${total}`, aiPrompt } };"
+      },
+      "name": "Format VT Verdict",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4096,
+        784
+      ],
+      "id": "ac0cd311-6e7f-4b60-a1bd-c4bd3f6c1900"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o-mini\",\n  \"temperature\": 0.2,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a SOC assistant. Reply with one or two plain-English sentences, no markdown, no bullet points, explaining the VirusTotal verdict to a non-expert. Style example: The domain example.com is considered safe, with no security engines flagging it as malicious. For Suspicious or Malicious results, add one short recommended action.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.aiPrompt) }}\n    }\n  ]\n}",
+        "options": {}
+      },
+      "name": "AI Plain-English Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4320,
+        784
+      ],
+      "id": "cfc7dc90-e993-49cc-bdb7-6ab016c016f8",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ikRRGedWMfBfBpXT",
+          "name": "Header Auth account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const f = $('Format VT Verdict').item.json;\nconst ai = (($json.choices && $json.choices[0] && $json.choices[0].message.content) || '').trim();\nconst summary = ai || 'AI summary unavailable.';\n\nconst detLine = f.detections === 'n/a' ? 'Detections: n/a'\n  : `Detections: ${f.detections} engines flagged this`;\n\nconst reply = `IOC: ${f.ioc} (${f.iocType})\\nVerdict: ${f.verdict}\\n${detLine}\\n\\n${summary}`;\nreturn { json: { chatId: f.chatId, reply } };"
+      },
+      "name": "Merge Final Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4528,
+        784
+      ],
+      "id": "dec61d27-c78a-472b-b880-c99b6bea6eaa"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.reply }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "name": "Send Telegram Reply",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        4752,
+        784
+      ],
+      "webhookId": "ioc-triage-send-1",
+      "id": "e3a74231-18f9-4aa1-8e8b-cd54a77dfbe2",
+      "credentials": {
+        "telegramApi": {
+          "id": "Hk4SH1eP3x0AnGQz",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const d = $('IOC Type Detector').item.json;\nconst reply = `👋 Hi! I'm your IOC Triage Bot.\\n\\nSend me an IP address, domain, URL, or file hash, and I'll check it against VirusTotal and give you a quick verdict.\\n\\nExample: 8.8.8.8`;\nreturn { json: { chatId: d.chatId, reply } };"
+      },
+      "name": "Greeting Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3632,
+        1280
+      ],
+      "id": "655e0362-942f-4b1a-a351-abfb4f6c93a6"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const d = $('IOC Type Detector').item.json;\nconst reply = `I couldn't identify that as an IP, domain, URL, or file hash.\\nPlease send a single IOC, e.g. 8.8.8.8 or a SHA256 hash.`;\nreturn { json: { chatId: d.chatId, reply } };"
+      },
+      "name": "Unknown IOC Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3632,
+        1440
+      ],
+      "id": "d1595b57-2d29-4d81-9354-52b28ff619d4"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.reply }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "name": "Send Unknown-IOC Reply",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        4096,
+        1344
+      ],
+      "webhookId": "ioc-triage-send-2",
+      "id": "2c29417c-33e3-4a98-a8a6-feae3baad256",
+      "credentials": {
+        "telegramApi": {
+          "id": "Hk4SH1eP3x0AnGQz",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "IOC Type Detector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IOC Type Detector": {
+      "main": [
+        [
+          {
+            "node": "Switch: Route by IOC Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch: Route by IOC Type": {
+      "main": [
+        [
+          {
+            "node": "VT Lookup: IP",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "VT Lookup: Domain",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Encode URL for VT",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "VT Lookup: Hash",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Greeting Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unknown IOC Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VT Lookup: IP": {
+      "main": [
+        [
+          {
+            "node": "Format VT Verdict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VT Lookup: Domain": {
+      "main": [
+        [
+          {
+            "node": "Format VT Verdict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Encode URL for VT": {
+      "main": [
+        [
+          {
+            "node": "VT Lookup: URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VT Lookup: URL": {
+      "main": [
+        [
+          {
+            "node": "Format VT Verdict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VT Lookup: Hash": {
+      "main": [
+        [
+          {
+            "node": "Format VT Verdict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format VT Verdict": {
+      "main": [
+        [
+          {
+            "node": "AI Plain-English Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Plain-English Summary": {
+      "main": [
+        [
+          {
+            "node": "Merge Final Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Final Reply": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Greeting Message": {
+      "main": [
+        [
+          {
+            "node": "Send Unknown-IOC Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unknown IOC Message": {
+      "main": [
+        [
+          {
+            "node": "Send Unknown-IOC Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "c81e4eec-cc60-49b3-98f6-a4eaf07fe948",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "e3eea2719a8bbf716ecceef75f03f07aa5ef97d9c6f985c913590812e6835c8f"
+  },
+  "nodeGroups": [],
+  "id": "3BAlEOHa8iJwMSUW",
+  "tags": []
+}
