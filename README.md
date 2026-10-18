@@ -4,9 +4,9 @@ A Telegram bot that checks an IP, domain, URL or file hash against VirusTotal
 and replies with a verdict and a plain-English summary.
 
 ## Demo
-![Workflow](workflow-canvas.png)
-![Malicious result](telegram-malicious.png)
-![Clean result](telegram-clean.png)
+![Workflow](Screenshot%202026-07-13%20134004.png)
+![Malicious result](Screenshot%202026-07-13%20134018.png)
+![Clean result](Screenshot%202026-07-13%20134037.png)
 
 ## How it works
 Telegram Trigger → IOC Type Detector → Switch (IP / Domain / URL / Hash / Greeting / Unknown)
